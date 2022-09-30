@@ -1,0 +1,153 @@
+
+##############################################
+# Services
+##############################################
+#Service postgrest
+kind: Service
+apiVersion: v1
+metadata:
+  name: postgrest
+spec:
+  selector:
+    module: postgrest
+  ports:
+  - name: postgrest
+    protocol: TCP   
+    port: 3000
+    targetPort: 3000
+---  
+#Service postgui
+kind: Service
+apiVersion: v1
+metadata:
+  name: postguiruntime  
+spec:
+  type: NodePort
+  selector:
+    module: postguiruntime
+  ports:
+  - name: postgui
+    protocol: TCP
+    nodePort: 30081
+    port: 8771
+    targetPort: 8771
+---     
+# ##############################################
+# # Deployments
+# ##############################################
+apiVersion: apps/v1
+kind: Deployment 
+metadata:
+  name: postgrest   
+spec:
+  replicas: 1 
+  selector:
+    matchLabels:
+      app: postgrest
+  template:
+    metadata:
+      labels:
+        app: postgrest
+    spec:
+      containers:
+        - name: postgrest
+          image:  postgrest/postgrest:v10.0.0
+          imagePullPolicy: "IfNotPresent"                   
+          env:
+            - name: PGRST_DB_URI
+              value: postgres://postgres:abcd1234@postgui-postgresql:5432/dvdrental
+            - name: DB_USER_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: postgui-postgresql
+                  key: postgres-password
+            - name: DB_USER
+              value: postgres
+          volumeMounts:            
+            - mountPath: "/etc/app/db.conf"
+              name: config       
+      volumes:        
+        - name: config
+          secret:
+            secretName: postgrest-secret               
+---                  
+apiVersion: apps/v1
+kind: Deployment 
+metadata:
+  name: postguiruntime
+  labels:
+    module: postguiruntime
+spec:
+  replicas: 1 
+  selector:
+    matchLabels:
+      app: postguiruntime
+  template:
+    metadata:
+      labels:
+        app: postguiruntime
+    spec:
+      containers:            
+        - name: postguiruntime
+          stdin: true 
+          tty: true         
+          image: dimostoychev/postgui:1.0.1
+          imagePullPolicy: "IfNotPresent"  
+          command: ['/bin/bash', '-c', 'npm start'] 
+          volumeMounts:
+            - name: config
+              mountPath: src/data/
+              subPath: config.json              
+      volumes:
+        - name: config
+          configMap:
+            name: postgui-config                      
+---
+# ##############################################
+# # Deployments
+# ##############################################  
+apiVersion: v1
+data:
+  postgrest-config.yaml: IGRiLXVyaSA9ICJwb3N0Z3JlczovL3Bvc3RncmVzOmFiY2QxMjM0QHBvc3RndWktcG9zdGdyZXNxbDo1NDMyL2R2ZHJlbnRhbCIKZGItc2NoZW1hID0gInB1YmxpYyIKZGItYW5vbi1yb2xlID0gInBvc3RncmVzIgpkYi1wb29sID0gMTAKc2VydmVyLWhvc3QgPSAiKjQiCnNlcnZlci1wb3J0ID0gMzAwMA==
+kind: Secret
+metadata:  
+  name: postgrest-secret  
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgui-config
+data:
+  config.json: |
+    {
+      "databases": [
+        {
+          "title": "DVD Rentals",
+          "url": "http://postgrest:3000",
+          "publicDbAcessType": "read",
+          "foreignKeySearch": true,
+          "primaryKeyFunction": true,
+          "regexSupport": false
+        }
+      ],
+      "logoUrl": null,
+      "seq_column_names": [
+        "alignment_sequence",
+        "nucleotide_sequence",
+        "aminoacid_sequence",
+        "nucleotide_seq",
+        "amino_acid_seq",
+        "nuc_seq",
+        "aa_seq",
+        "dna_seq",
+        "protein_seq",
+        "prot_seq",
+        "n_seq",
+        "p_seq",
+        "a_seq",
+        "seq",
+        "sequence"
+      ],
+      "errorMsg": "ERROR"
+    }
+ 
